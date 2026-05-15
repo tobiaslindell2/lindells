@@ -1,259 +1,154 @@
-{{
-    config(
-        materialized='table'
-    )
-}}
-
-with
-
-cfh_vsop_trakt as (
-    select * from {{ ref('VSOP_CURR_FR_HIST_TRAKT') }}
-),
-
-
-cfh_vsop_trakt_status_logg as (
-    select * from {{ ref('VSOP_CURR_FR_HIST_TRAKT_STATUS_LOGG') }}
-),
-
-
-cfh_vsop_ursprung as (
-    select * from {{ ref('VSOP_CURR_FR_HIST_URSPRUNG') }}
-),
-
-
-cfh_vsop_status as (
-    select * from {{ ref('VSOP_CURR_FR_HIST_STATUS') }}
-),
-
-
-cfh_vsop_avverkningsform as (
-    select * from {{ ref('VSOP_CURR_FR_HIST_AVVERKNINGSFORM') }}
-),
-
-
-cfh_vsop_oganisation3 as (
-    select * from {{ ref('VSOP_CURR_FR_HIST_ORGANISATION3') }}
-),
-
-
-cfh_vsop_transportbarighet as (
-    select * from {{ ref('VSOP_CURR_FR_HIST_TRANSPORTBARIGHET') }}
-),
-
-
-cfh_vsop_person as (
-    select * from {{ ref('VSOP_CURR_FR_HIST_PERSON') }}
-),
-
-
-ref_vsop_kontrakt as (
-    select * from {{ ref('REF_VSOP_KONTRAKT') }}
-),
-
-
-ref_vsop_utbyte as (
-    select 
-        trakt_id,
-        SUM(VOLYM_M3FUB) as sum__volym_m3fub
-    from {{ ref('REF_VSOP_UTBYTE') }}
-    group by trakt_id
-),
-
-
-joined as (
-    select
-        trkt.TRAKT_ID,
-        trkt.TRAKT_NR,
-        trkt.TRAKT_NAMN,
-        trkt.MEDELSTAM_M3FUB,
-        trkt.AREAL_NETTO,
-        trkt.PLANERARE,
-        trkt.SENAST_UPPDATERAD_AV,
-        trkt.AVVERKNINGSANMALT,
-        ursp.BESKRIVNING as beskrivning_ursprung,
-        stts.BESKRIVNING as beskrivning_status,
-        avvf.BESKRIVNING as beskrivning_avverkningsform,
-        org3.BESKRIVNING as beskrivning_organisation3,
-        trns.ARSTID as arstid,
-        pers.EFTERNAMN || ' ' || pers.FORNAMN as EFTERNAMN__FORNAMN,
-        kont.kontrakt_id,
-        kont.kontrakt_datum,
-        kont.beskrivning_kontraktstatus,
-        byte.sum__volym_m3fub
-    from cfh_vsop_trakt as trkt
-    left join cfh_vsop_ursprung as ursp
-        on trkt.URSPRUNG_ID = ursp.URSPRUNG_ID
-    left join cfh_vsop_status as stts
-        on trkt.STATUS_ID = stts.STATUS_ID
-    left join cfh_vsop_avverkningsform as avvf
-        on trkt.AVVERKNINGSFORM_ID = avvf.AVVERKNINGSFORM_ID
-    left join cfh_vsop_oganisation3 as org3
-        on trkt.ORGANISATION3_ID = org3.ORGANISATION3_ID
-    left join cfh_vsop_transportbarighet as trns
-        on trkt.TRANSPORTBARIGHET_ID = trns.TRANSPORTBARIGHET_ID
-    left join cfh_vsop_person as pers
-        on trkt.KONTAKTPERSON_ID = pers.KONTAKTPERSON_ID
-    left join ref_vsop_utbyte as byte
-        on trkt.TRAKT_ID = byte.TRAKT_ID
-    left join ref_vsop_kontrakt as kont
-        on trkt.TRAKT_ID = kont.TRAKT_ID
-),
-
-
-modifications as (
-    select
-        jnd.*,
-        case
-            when jnd.EFTERNAMN__FORNAMN = 'BERGSLAGETS EGENDOMAR AB ' THEN 'STORA ENSO SKOGSEGENDOM AB'
-            when jnd.EFTERNAMN__FORNAMN = '5595259622 ' THEN 'SESOM 2 AB'
-            else jnd.EFTERNAMN__FORNAMN
-        end as leverantor,
-        case
-            when jnd.beskrivning_ursprung = 'Leveransrotköp' then 'SESOM2 / Lokala löp'
-            when jnd.beskrivning_ursprung = 'Egen Skog & Bergvik' then 'ForestCo'
-            else '?'
-        end as ursprung_mod,
-        (
-            select MAX(cfh_vsop_trakt_status_logg.STATUS_DATUM)
-            from cfh_vsop_trakt_status_logg
-            where cfh_vsop_trakt_status_logg.TRAKT_ID = jnd.TRAKT_ID
-        ) as max__status_datum
-    from joined as jnd
-),
-
-
-Data_10_apr as (
-    select
-        trakt_id as trakt_id,
-        trakt_nr as "Traktnummer",
-        trakt_namn as "Traktnamn",
-        beskrivning_organisation3 as "Flödesområde",
-        beskrivning_avverkningsform as "Arbetsform",
-        medelstam_m3fub as "M.Stam m3Fub Utbyte",
-        arstid as "Årstid trakt",
-        areal_netto as "Traktareal",
-        ROUND(sum__volym_m3fub, 0) as "Utbytesvolym m3fub",
-        beskrivning_status as "Status",
-        planerare as "Planerare",
-        leverantor as "Leverantör",
-        ursprung_mod as "Ursprung",
-        senast_uppdaterad_av as "Senast uppdaterad av",
-        avverkningsanmalt as "Avverkningsanmält",
-        max__status_datum as "Senast planerbar",
-        kontrakt_datum as "Kontraktsdatum",
-        beskrivning_kontraktstatus as "Kontraktsstatus",
-        kontrakt_id as "TEMP_KONTRAKT_ID"
-    from modifications
-)
-
-
-select
-    *
-from Data_10_apr
---where TRAKT_ID = '90140'
---where "Traktnummer" IN (263304262)
-where "Traktnummer" IN (236304324, 263304262, 236241808, 224310148)
-
-
-
-
-
-
-
-
-
-{{
-    config(
-        materialized='table'
-    )
-}}
-
-with
-
-cfh_vsop_trakt as (
-    select * from {{ ref('VSOP_CURR_FR_HIST_TRAKT') }}
-),
-
-
-cfh_vsop_traktdel as (
-    select * from {{ ref('VSOP_CURR_FR_HIST_TRAKTDEL') }}
-),
-
-
-cfh_vsop_kontrakt as (
-    select * from {{ ref('VSOP_CURR_FR_HIST_KONTRAKT') }}
-),
-
-
-cfh_vsop_kontraktstatus as (
-    select * from {{ ref('VSOP_CURR_FR_HIST_KONTRAKTSTATUS') }}
-),
-
-
-kontrakt_distinct as (
-    select distinct
-        trkt.trakt_id,
-        kont.kontrakt_id as distinct__kontrakt_id
-    from cfh_vsop_trakt as trkt
-    left join cfh_vsop_traktdel as tdel -- Kan vara flera traktdelar på en trakt, dvs. relation av typ one-to-many
-        on trkt.TRAKT_ID = tdel.TRAKT_ID
-    left join cfh_vsop_kontrakt as kont -- Ser däremot endast ut att finnas max ett kontrakt per trakt_id
-        on tdel.VARDERING_ID = kont.VARDERING_ID
-    where kont.kontrakt_id is not null
-),
-
-
-final as (
-    select
-        dist.trakt_id,
-        kont.kontrakt_id,
-        ksts.beskrivning as beskrivning_kontraktstatus,
-        kont.* exclude (kontrakt_id)
-    from kontrakt_distinct as dist
-    left join cfh_vsop_kontrakt as kont
-        on dist.distinct__kontrakt_id = kont.kontrakt_id
-    left join cfh_vsop_kontraktstatus as ksts
-        on kont.kontraktstatus_id = ksts.kontraktstatus_id
-)
-
-
-select * from final
-order by trakt_id DESC, kontrakt_id DESC, vardering_id DESC, kontrakt_datum DESC
-
-
-
-
-
-{{
-    config(
-        materialized='table'
-    )
-}}
-
-with
-
-cfh_vsop_utbyte as (
-    select * from {{ ref('VSOP_CURR_FR_HIST_UTBYTE') }}
-),
-
-
-cfh_vsop_utbyte_resultat as (
-    select * from {{ ref('VSOP_CURR_FR_HIST_UTBYTE_RESULTAT') }}
-),
-
-
-final as (
-    select 
-        byte.*,
-        _res.sortiments_id,
-        _res.volym_m3fub,
-        _res.volym_handelsmatt,
-        _res.mottagningsplats_id
-    from cfh_vsop_utbyte as byte
-    left join cfh_vsop_utbyte_resultat as _res
-        on byte.utbytes_id = _res.utbytes_id
-)
-
-
-select * from final
-order by trakt_id DESC, traktdel_id DESC, utbytes_id DESC
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lindells på Skutudden — Loggbok från hav och hem</title>
+  <meta name="description" content="Familjen Lindells loggbok med berättelser från resor och minnen — från segling i Medelhavet till påsk på Granö.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a class="brand" href="index.html" aria-label="Hem">
+      <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="5" r="2"/>
+        <line x1="12" y1="7" x2="12" y2="21"/>
+        <line x1="8" y1="10" x2="16" y2="10"/>
+        <path d="M4 16 C 5 19, 9 21, 12 21"/>
+        <path d="M20 16 C 19 19, 15 21, 12 21"/>
+      </svg>
+      <h1 class="site-title">Lindells på Skutudden</h1>
+    </a>
+    <p class="site-tagline">Loggbok från hav och hem</p>
+    <nav class="site-nav" aria-label="Huvudmeny">
+      <a href="index.html" class="active">Hem</a>
+      <a href="about.html">Om oss</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+  <section class="hero">
+    <h1>Berättelser, resor och minnen</h1>
+    <hr class="rule">
+    <p>En samling anteckningar från seglatser, resmål och vardagsstunder — bläddra fritt i loggboken nedan.</p>
+  </section>
+
+  <section class="card-grid" aria-label="Inlägg">
+
+    <a class="card" href="posts/segling-grekland-2014.html">
+      <div class="card-thumb placeholder">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M3 24c2-1.5 4-1.5 6 0s4 1.5 6 0 4-1.5 6 0 4 1.5 6 0M3 19c2-1.5 4-1.5 6 0s4 1.5 6 0 4-1.5 6 0 4 1.5 6 0"/></svg>
+      </div>
+      <div class="card-body">
+        <div class="card-meta">Segling<span class="dot"></span>12 okt 2014</div>
+        <h3 class="card-title">Segling i Grekland september 2014</h3>
+        <p class="card-excerpt">Bilder från årets segling i Medelhavet samlas in — något att värma sig vid i höstmörkret.</p>
+        <span class="card-link">Läs mer</span>
+      </div>
+    </a>
+
+    <a class="card" href="posts/aloa-hawaii.html">
+      <div class="card-thumb placeholder">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="9"/><path d="M16 7v18M7 16h18M9.5 9.5l13 13M22.5 9.5l-13 13"/></svg>
+      </div>
+      <div class="card-body">
+        <div class="card-meta">Resor<span class="dot"></span>29 sep 2013</div>
+        <h3 class="card-title">Aloa Hawaii</h3>
+        <p class="card-excerpt">Julen 2011 hälsade vi på Tobbe på Hawaii — en mycket minnesvärd resa där vi också mötte Louise första gången.</p>
+        <span class="card-link">Läs mer</span>
+      </div>
+    </a>
+
+    <a class="card" href="posts/segling-medelhavet.html">
+      <div class="card-thumb placeholder">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="10"/><path d="M16 6l2 8 8 2-8 2-2 8-2-8-8-2 8-2z"/></svg>
+      </div>
+      <div class="card-body">
+        <div class="card-meta">Segling<span class="dot"></span>29 sep 2013</div>
+        <h3 class="card-title">Oförglömlig segling i Medelhavet, Kos — Gibraltar</h3>
+        <p class="card-excerpt">Sommaren 2008 seglade vi 40-fotaren Citron Bleu från Kos till Vättern — delfiner, valar och en osannolik stjärnhimmel.</p>
+        <span class="card-link">Läs mer</span>
+      </div>
+    </a>
+
+    <a class="card" href="posts/tjejresa-malaga.html">
+      <div class="card-thumb placeholder">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="9"/><path d="M16 7v18M7 16h18M9.5 9.5l13 13M22.5 9.5l-13 13"/></svg>
+      </div>
+      <div class="card-body">
+        <div class="card-meta">Resor<span class="dot"></span>25 sep 2013</div>
+        <h3 class="card-title">Tjejresa till Malaga</h3>
+        <p class="card-excerpt">En tjejresa för att fira Gitas försenade 50-årsdag. Äldre nu — men med ungdomligt sinne kvar.</p>
+        <span class="card-link">Läs mer</span>
+      </div>
+    </a>
+
+    <a class="card" href="posts/saknar-dig-pappa.html">
+      <div class="card-thumb">
+        <img src="assets/pappa-ragnar.jpg" alt="Pappa Ragnar" loading="lazy">
+      </div>
+      <div class="card-body">
+        <div class="card-meta">Minnen<span class="dot"></span>29 mars 2013</div>
+        <h3 class="card-title">Saknar dig pappa</h3>
+        <p class="card-excerpt">Den 5 maj har det gått ett år sedan pappa lämnade oss. Vi saknar dig så.</p>
+        <span class="card-link">Läs mer</span>
+      </div>
+    </a>
+
+    <a class="card" href="posts/besok-down-under.html">
+      <div class="card-thumb placeholder">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="9"/><path d="M16 7v18M7 16h18M9.5 9.5l13 13M22.5 9.5l-13 13"/></svg>
+      </div>
+      <div class="card-body">
+        <div class="card-meta">Resor<span class="dot"></span>22 jan 2013</div>
+        <h3 class="card-title">Besök down under</h3>
+        <p class="card-excerpt">Bloggen får tjäna som resväska för livets minnen — dagboksanteckningar från Australien.</p>
+        <span class="card-link">Läs mer</span>
+      </div>
+    </a>
+
+    <a class="card" href="posts/mission-complete.html">
+      <div class="card-thumb placeholder">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M6 16l6 6 14-14"/></svg>
+      </div>
+      <div class="card-body">
+        <div class="card-meta">Notiser<span class="dot"></span>3 okt 2011</div>
+        <h3 class="card-title">Mission complete</h3>
+        <p class="card-excerpt">Dalarna.se rullar nu på med fina skribenter. Titta gärna in där också.</p>
+        <span class="card-link">Läs mer</span>
+      </div>
+    </a>
+
+    <a class="card" href="posts/pask-pa-grano.html">
+      <div class="card-thumb">
+        <img src="assets/pask-022.jpg" alt="Påsk på Granö" loading="lazy">
+      </div>
+      <div class="card-body">
+        <div class="card-meta">Familj<span class="dot"></span>25 apr 2011</div>
+        <h3 class="card-title">Påsk på Granö</h3>
+        <p class="card-excerpt">En magisk helg vid Runn med vårvärme, paddelpremiär och granne Nisses 70-årsfirande.</p>
+        <span class="card-link">Läs mer</span>
+      </div>
+    </a>
+
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="anchor" aria-hidden="true">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><line x1="12" y1="7" x2="12" y2="21"/><line x1="8" y1="10" x2="16" y2="10"/><path d="M4 16 C 5 19, 9 21, 12 21"/><path d="M20 16 C 19 19, 15 21, 12 21"/></svg>
+  </div>
+  <p>Lindells på Skutudden</p>
+  <p style="text-transform:none;letter-spacing:0.05em;font-family:var(--font-display);font-style:italic;">Loggbok från hav och hem</p>
+</footer>
+
+</body>
+</html>
