@@ -1,0 +1,259 @@
+{{
+    config(
+        materialized='table'
+    )
+}}
+
+with
+
+cfh_vsop_trakt as (
+    select * from {{ ref('VSOP_CURR_FR_HIST_TRAKT') }}
+),
+
+
+cfh_vsop_trakt_status_logg as (
+    select * from {{ ref('VSOP_CURR_FR_HIST_TRAKT_STATUS_LOGG') }}
+),
+
+
+cfh_vsop_ursprung as (
+    select * from {{ ref('VSOP_CURR_FR_HIST_URSPRUNG') }}
+),
+
+
+cfh_vsop_status as (
+    select * from {{ ref('VSOP_CURR_FR_HIST_STATUS') }}
+),
+
+
+cfh_vsop_avverkningsform as (
+    select * from {{ ref('VSOP_CURR_FR_HIST_AVVERKNINGSFORM') }}
+),
+
+
+cfh_vsop_oganisation3 as (
+    select * from {{ ref('VSOP_CURR_FR_HIST_ORGANISATION3') }}
+),
+
+
+cfh_vsop_transportbarighet as (
+    select * from {{ ref('VSOP_CURR_FR_HIST_TRANSPORTBARIGHET') }}
+),
+
+
+cfh_vsop_person as (
+    select * from {{ ref('VSOP_CURR_FR_HIST_PERSON') }}
+),
+
+
+ref_vsop_kontrakt as (
+    select * from {{ ref('REF_VSOP_KONTRAKT') }}
+),
+
+
+ref_vsop_utbyte as (
+    select 
+        trakt_id,
+        SUM(VOLYM_M3FUB) as sum__volym_m3fub
+    from {{ ref('REF_VSOP_UTBYTE') }}
+    group by trakt_id
+),
+
+
+joined as (
+    select
+        trkt.TRAKT_ID,
+        trkt.TRAKT_NR,
+        trkt.TRAKT_NAMN,
+        trkt.MEDELSTAM_M3FUB,
+        trkt.AREAL_NETTO,
+        trkt.PLANERARE,
+        trkt.SENAST_UPPDATERAD_AV,
+        trkt.AVVERKNINGSANMALT,
+        ursp.BESKRIVNING as beskrivning_ursprung,
+        stts.BESKRIVNING as beskrivning_status,
+        avvf.BESKRIVNING as beskrivning_avverkningsform,
+        org3.BESKRIVNING as beskrivning_organisation3,
+        trns.ARSTID as arstid,
+        pers.EFTERNAMN || ' ' || pers.FORNAMN as EFTERNAMN__FORNAMN,
+        kont.kontrakt_id,
+        kont.kontrakt_datum,
+        kont.beskrivning_kontraktstatus,
+        byte.sum__volym_m3fub
+    from cfh_vsop_trakt as trkt
+    left join cfh_vsop_ursprung as ursp
+        on trkt.URSPRUNG_ID = ursp.URSPRUNG_ID
+    left join cfh_vsop_status as stts
+        on trkt.STATUS_ID = stts.STATUS_ID
+    left join cfh_vsop_avverkningsform as avvf
+        on trkt.AVVERKNINGSFORM_ID = avvf.AVVERKNINGSFORM_ID
+    left join cfh_vsop_oganisation3 as org3
+        on trkt.ORGANISATION3_ID = org3.ORGANISATION3_ID
+    left join cfh_vsop_transportbarighet as trns
+        on trkt.TRANSPORTBARIGHET_ID = trns.TRANSPORTBARIGHET_ID
+    left join cfh_vsop_person as pers
+        on trkt.KONTAKTPERSON_ID = pers.KONTAKTPERSON_ID
+    left join ref_vsop_utbyte as byte
+        on trkt.TRAKT_ID = byte.TRAKT_ID
+    left join ref_vsop_kontrakt as kont
+        on trkt.TRAKT_ID = kont.TRAKT_ID
+),
+
+
+modifications as (
+    select
+        jnd.*,
+        case
+            when jnd.EFTERNAMN__FORNAMN = 'BERGSLAGETS EGENDOMAR AB ' THEN 'STORA ENSO SKOGSEGENDOM AB'
+            when jnd.EFTERNAMN__FORNAMN = '5595259622 ' THEN 'SESOM 2 AB'
+            else jnd.EFTERNAMN__FORNAMN
+        end as leverantor,
+        case
+            when jnd.beskrivning_ursprung = 'Leveransrotköp' then 'SESOM2 / Lokala löp'
+            when jnd.beskrivning_ursprung = 'Egen Skog & Bergvik' then 'ForestCo'
+            else '?'
+        end as ursprung_mod,
+        (
+            select MAX(cfh_vsop_trakt_status_logg.STATUS_DATUM)
+            from cfh_vsop_trakt_status_logg
+            where cfh_vsop_trakt_status_logg.TRAKT_ID = jnd.TRAKT_ID
+        ) as max__status_datum
+    from joined as jnd
+),
+
+
+Data_10_apr as (
+    select
+        trakt_id as trakt_id,
+        trakt_nr as "Traktnummer",
+        trakt_namn as "Traktnamn",
+        beskrivning_organisation3 as "Flödesområde",
+        beskrivning_avverkningsform as "Arbetsform",
+        medelstam_m3fub as "M.Stam m3Fub Utbyte",
+        arstid as "Årstid trakt",
+        areal_netto as "Traktareal",
+        ROUND(sum__volym_m3fub, 0) as "Utbytesvolym m3fub",
+        beskrivning_status as "Status",
+        planerare as "Planerare",
+        leverantor as "Leverantör",
+        ursprung_mod as "Ursprung",
+        senast_uppdaterad_av as "Senast uppdaterad av",
+        avverkningsanmalt as "Avverkningsanmält",
+        max__status_datum as "Senast planerbar",
+        kontrakt_datum as "Kontraktsdatum",
+        beskrivning_kontraktstatus as "Kontraktsstatus",
+        kontrakt_id as "TEMP_KONTRAKT_ID"
+    from modifications
+)
+
+
+select
+    *
+from Data_10_apr
+--where TRAKT_ID = '90140'
+--where "Traktnummer" IN (263304262)
+where "Traktnummer" IN (236304324, 263304262, 236241808, 224310148)
+
+
+
+
+
+
+
+
+
+{{
+    config(
+        materialized='table'
+    )
+}}
+
+with
+
+cfh_vsop_trakt as (
+    select * from {{ ref('VSOP_CURR_FR_HIST_TRAKT') }}
+),
+
+
+cfh_vsop_traktdel as (
+    select * from {{ ref('VSOP_CURR_FR_HIST_TRAKTDEL') }}
+),
+
+
+cfh_vsop_kontrakt as (
+    select * from {{ ref('VSOP_CURR_FR_HIST_KONTRAKT') }}
+),
+
+
+cfh_vsop_kontraktstatus as (
+    select * from {{ ref('VSOP_CURR_FR_HIST_KONTRAKTSTATUS') }}
+),
+
+
+kontrakt_distinct as (
+    select distinct
+        trkt.trakt_id,
+        kont.kontrakt_id as distinct__kontrakt_id
+    from cfh_vsop_trakt as trkt
+    left join cfh_vsop_traktdel as tdel -- Kan vara flera traktdelar på en trakt, dvs. relation av typ one-to-many
+        on trkt.TRAKT_ID = tdel.TRAKT_ID
+    left join cfh_vsop_kontrakt as kont -- Ser däremot endast ut att finnas max ett kontrakt per trakt_id
+        on tdel.VARDERING_ID = kont.VARDERING_ID
+    where kont.kontrakt_id is not null
+),
+
+
+final as (
+    select
+        dist.trakt_id,
+        kont.kontrakt_id,
+        ksts.beskrivning as beskrivning_kontraktstatus,
+        kont.* exclude (kontrakt_id)
+    from kontrakt_distinct as dist
+    left join cfh_vsop_kontrakt as kont
+        on dist.distinct__kontrakt_id = kont.kontrakt_id
+    left join cfh_vsop_kontraktstatus as ksts
+        on kont.kontraktstatus_id = ksts.kontraktstatus_id
+)
+
+
+select * from final
+order by trakt_id DESC, kontrakt_id DESC, vardering_id DESC, kontrakt_datum DESC
+
+
+
+
+
+{{
+    config(
+        materialized='table'
+    )
+}}
+
+with
+
+cfh_vsop_utbyte as (
+    select * from {{ ref('VSOP_CURR_FR_HIST_UTBYTE') }}
+),
+
+
+cfh_vsop_utbyte_resultat as (
+    select * from {{ ref('VSOP_CURR_FR_HIST_UTBYTE_RESULTAT') }}
+),
+
+
+final as (
+    select 
+        byte.*,
+        _res.sortiments_id,
+        _res.volym_m3fub,
+        _res.volym_handelsmatt,
+        _res.mottagningsplats_id
+    from cfh_vsop_utbyte as byte
+    left join cfh_vsop_utbyte_resultat as _res
+        on byte.utbytes_id = _res.utbytes_id
+)
+
+
+select * from final
+order by trakt_id DESC, traktdel_id DESC, utbytes_id DESC
